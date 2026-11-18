@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OTC medicines</title>
+  <style>
+    body { font: 16px system-ui, sans-serif; margin: 2rem auto; max-width: 50rem; padding: 0 1rem; }
+    input { font: inherit; padding: .5rem; width: 100%; }
+    li { margin: .35rem 0; }
+    small { color: #555; }
+  </style>
+</head>
+<body>
+  <h1>Over-the-counter medicines</h1>
+  <p><label for="filter">Filter by disease</label></p>
+  <input id="filter" type="search" placeholder="e.g. allergy">
+  <p id="status">Loading…</p>
+  <main id="results"></main>
+  <script>
+    const filter = document.querySelector("#filter");
+    const results = document.querySelector("#results");
+    let diseases = {};
+    function render() {
+      const query = filter.value.trim().toLowerCase();
+      results.replaceChildren();
+      Object.entries(diseases)
+        .filter(([disease]) => disease.toLowerCase().includes(query))
+        .forEach(([disease, medicines]) => {
+          const section = document.createElement("section");
+          section.innerHTML = `<h2>${disease}</h2><ul>${medicines.map(
+            medicine => `<li>${medicine}</li>`).join("")}</ul>`;
+          results.append(section);
+        });
+    }
+    fetch("data/medications.json")
+      .then(response => response.json())
+      .then(data => {
+        diseases = data.diseases || data;
+        document.querySelector("#status").textContent =
+          `${Object.keys(diseases).length} disease categories`;
+        render();
+      })
+      .catch(() => {
+        document.querySelector("#status").textContent = "The medicine data is unavailable.";
+      });
+    filter.addEventListener("input", render);
+  </script>
+</body>
+</html>
