@@ -319,7 +319,7 @@ if(!humanMedications.length)return;
 const section=document.createElement("section"); const heading=document.createElement("h2");
 heading.textContent=d; const list=document.createElement("ul");
 humanMedications.forEach(m=>{{const item=document.createElement("li"); item.textContent=m; list.append(item)}});
-section.append(heading,list); results.append(section);}});}}
+section.append(heading,list); results.append(section);}});
 document.querySelector("#status").textContent=diseaseEntries.length+" disease categories · "+veterinaryMedications.size+" veterinary medicines";
 }}
 filter.addEventListener("change",render);
