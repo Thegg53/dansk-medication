@@ -250,7 +250,6 @@ def download_workbook(page_url: str = SOURCE_PAGE) -> Path:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("workbook", nargs="?", type=Path, help="Local .xlsx workbook")
     parser.add_argument("--sheet", help="Worksheet name (defaults to the first worksheet)")
     parser.add_argument("--source-page", default=SOURCE_PAGE, help="Page containing the workbook link")
     parser.add_argument(
@@ -272,12 +271,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("-o", "--output", type=Path, help="Write JSON to this file")
     args = parser.parse_args(argv)
     try:
-        workbook = args.workbook or download_workbook(args.source_page)
+        workbook = download_workbook(args.source_page)
         index = parse_csv(workbook) if workbook.suffix.lower() == ".csv" else parse_workbook(workbook, args.sheet)
     except (OSError, ValueError, zipfile.BadZipFile) as error:
         parser.error(str(error))
     generated_at = datetime.now(timezone.utc).isoformat()
-    source = str(args.workbook) if args.workbook else SOURCE_WORKBOOK
+    source = SOURCE_WORKBOOK
     metadata = {
         "generated_at": generated_at,
         "source": source,
@@ -285,8 +284,7 @@ def main(argv: list[str] | None = None) -> int:
         "disease_count": len(index),
         "medication_count": sum(len(items) for items in index.values()),
     }
-    if args.workbook:
-        metadata["source_sha256"] = hashlib.sha256(args.workbook.read_bytes()).hexdigest()
+    metadata["source_sha256"] = hashlib.sha256(workbook.read_bytes()).hexdigest()
     if args.web_output:
         output_data = {"metadata": metadata, "diseases": index}
     else:

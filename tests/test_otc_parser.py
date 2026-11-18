@@ -3,6 +3,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 from otc_parser import atc_to_disease, main, parse_csv, parse_workbook
 
@@ -41,7 +42,8 @@ class OtcParserTests(unittest.TestCase):
             source = Path(directory) / "otc.xlsx"
             target = Path(directory) / "index.json"
             workbook(source)
-            self.assertEqual(main([str(source), "-o", str(target)]), 0)
+            with patch("otc_parser.download_workbook", return_value=source):
+                self.assertEqual(main(["-o", str(target)]), 0)
             self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["Hovedpine"], ["Produkt A", "Produkt B"])
 
     def test_atc_codes_become_disease_categories(self):
@@ -74,13 +76,12 @@ class OtcParserTests(unittest.TestCase):
             target = Path(directory) / "web.json"
             log = Path(directory) / "runs.jsonl"
             workbook(source)
-            self.assertEqual(
-                main([
-                    str(source), "--web-output", "--availability", "non-pharmacy",
-                    "--log", str(log), "-o", str(target),
-                ]),
-                0,
-            )
+            with patch("otc_parser.download_workbook", return_value=source):
+                self.assertEqual(
+                    main(["--web-output", "--availability", "non-pharmacy",
+                          "--log", str(log), "-o", str(target)]),
+                    0,
+                )
             web_data = json.loads(target.read_text(encoding="utf-8"))
             self.assertEqual(web_data["metadata"]["availability"], "non-pharmacy")
             self.assertEqual(web_data["diseases"]["Hovedpine"], ["Produkt A", "Produkt B"])
