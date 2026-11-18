@@ -53,12 +53,13 @@ class OtcParserTests(unittest.TestCase):
                 "xl/worksheets/sheet1.xml": """<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>
                   <row><c r="A1" t="inlineStr"><is><t>ATC-Kode</t></is></c><c r="B1" t="inlineStr"><is><t>Lægemiddel</t></is></c></row>
                   <row><c r="A2" t="inlineStr"><is><t>N02BE01</t></is></c><c r="B2" t="inlineStr"><is><t>Paracetamol</t></is></c></row>
+                  <row><c r="B3" t="inlineStr"><is><t>Ibuprofen</t></is></c></row>
                 </sheetData></worksheet>""",
             }
             with zipfile.ZipFile(path, "w") as archive:
                 for name, content in files.items():
                     archive.writestr(name, content)
-            self.assertEqual(parse_workbook(path), {"pain and headache": ["Paracetamol"]})
+            self.assertEqual(parse_workbook(path), {"pain and headache": ["Paracetamol", "Ibuprofen"]})
             self.assertEqual(atc_to_disease("ZZZ01"), "ATC:ZZZ01")
 
     def test_csv_export_is_supported(self):

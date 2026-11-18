@@ -167,16 +167,19 @@ def _index_rows(
     medication_index = _column_index(headers, _MEDICATION_HEADERS)
     result: OrderedDict[str, list[str]] = OrderedDict()
     previous_disease = ""
+    previous_atc = ""
     for row in rows:
         row += [""] * (max(medication_index, disease_index or 0, atc_index or 0) + 1 - len(row))
         if disease_index is not None:
             disease = _text(row[disease_index]) or previous_disease
         else:
-            atc = _text(row[atc_index]) or previous_disease.removeprefix("ATC:")
+            atc = _text(row[atc_index]) or previous_atc
             disease = atc_to_disease(atc) if atc else ""
         medication = _text(row[medication_index])
         if disease:
             previous_disease = disease
+        if disease_index is None and atc:
+            previous_atc = atc
         if not disease or not medication:
             continue
         medications = result.setdefault(disease, [])
