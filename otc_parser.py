@@ -9,6 +9,7 @@ import html
 import hashlib
 import json
 import re
+import difflib
 import sys
 from datetime import datetime, timezone
 import unicodedata
@@ -248,6 +249,36 @@ def download_workbook(page_url: str = SOURCE_PAGE) -> Path:
     return target
 
 
+def render_html(data: object) -> str:
+    """Render a standalone webpage with the disease data embedded."""
+    payload = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace(
+        "</", "<\\/"
+    )
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OTC medicines</title>
+<style>body{{font:16px system-ui,sans-serif;margin:2rem auto;max-width:50rem;padding:0 1rem}}
+input{{font:inherit;padding:.5rem;width:100%}}li{{margin:.35rem 0}}small{{color:#555}}</style>
+</head><body><h1>Over-the-counter medicines</h1>
+<p><label for="filter">Filter by disease</label></p>
+<input id="filter" type="search" placeholder="e.g. allergy">
+<p id="status">Loading…</p><main id="results"></main>
+<script>
+const data={payload}, filter=document.querySelector("#filter");
+const results=document.querySelector("#results"), diseases=data.diseases||data;
+function render(){{const query=filter.value.trim().toLowerCase(); results.replaceChildren();
+Object.entries(diseases).filter(([d])=>d.toLowerCase().includes(query)).forEach(([d,ms])=>{{
+const section=document.createElement("section"); const heading=document.createElement("h2");
+heading.textContent=d; const list=document.createElement("ul");
+ms.forEach(m=>{{const item=document.createElement("li"); item.textContent=m; list.append(item)}});
+section.append(heading,list); results.append(section);}});}}
+document.querySelector("#status").textContent=Object.keys(diseases).length+" disease categories";
+filter.addEventListener("input",render); render();
+</script></body></html>
+"""
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sheet", help="Worksheet name (defaults to the first worksheet)")
@@ -263,11 +294,8 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Wrap the mapping with metadata for a webpage data source",
     )
-    parser.add_argument(
-        "--log",
-        type=Path,
-        help="Append a JSON audit record for this generation run",
-    )
+    parser.add_argument("--log", type=Path, help="Write the current refresh diff")
+    parser.add_argument("--html", type=Path, help="Write a standalone webpage")
     parser.add_argument("-o", "--output", type=Path, help="Write JSON to this file")
     args = parser.parse_args(argv)
     try:
@@ -290,13 +318,18 @@ def main(argv: list[str] | None = None) -> int:
     else:
         output_data = index
     output = json.dumps(output_data, ensure_ascii=False, indent=2) + "\n"
+    old_output = args.output.read_text(encoding="utf-8") if args.output and args.output.exists() else ""
     if args.output:
         args.output.write_text(output, encoding="utf-8")
     else:
         sys.stdout.write(output)
+    if args.html:
+        args.html.write_text(render_html(output_data), encoding="utf-8")
     if args.log:
-        with args.log.open("a", encoding="utf-8") as log:
-            log.write(json.dumps(metadata, ensure_ascii=False) + "\n")
+        new_lines = output.splitlines(keepends=True)
+        old_lines = old_output.splitlines(keepends=True)
+        diff = "".join(difflib.unified_diff(old_lines, new_lines, fromfile="previous", tofile="current"))
+        args.log.write_text(diff, encoding="utf-8")
     return 0
 
 

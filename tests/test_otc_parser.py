@@ -74,7 +74,7 @@ class OtcParserTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "otc.xlsx"
             target = Path(directory) / "web.json"
-            log = Path(directory) / "runs.jsonl"
+            log = Path(directory) / "changes.diff"
             workbook(source)
             with patch("otc_parser.download_workbook", return_value=source):
                 self.assertEqual(
@@ -85,9 +85,18 @@ class OtcParserTests(unittest.TestCase):
             web_data = json.loads(target.read_text(encoding="utf-8"))
             self.assertEqual(web_data["metadata"]["availability"], "non-pharmacy")
             self.assertEqual(web_data["diseases"]["Hovedpine"], ["Produkt A", "Produkt B"])
-            audit_record = json.loads(log.read_text(encoding="utf-8"))
-            self.assertEqual(audit_record["disease_count"], 2)
-            self.assertEqual(len(audit_record["source_sha256"]), 64)
+            self.assertIn("--- previous", log.read_text(encoding="utf-8"))
+
+    def test_cli_generates_standalone_html(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "otc.xlsx"
+            html = Path(directory) / "index.html"
+            workbook(source)
+            with patch("otc_parser.download_workbook", return_value=source):
+                self.assertEqual(main(["--web-output", "--html", str(html)]), 0)
+            content = html.read_text(encoding="utf-8")
+            self.assertIn("const data=", content)
+            self.assertIn("Hovedpine", content)
 
 
 if __name__ == "__main__":
