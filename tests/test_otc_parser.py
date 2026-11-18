@@ -68,6 +68,26 @@ class OtcParserTests(unittest.TestCase):
             path.write_text("ATC-Kode;Lægemiddel\nR06A;Cetirizin\n", encoding="utf-8")
             self.assertEqual(parse_csv(path), {"allergy": ["Cetirizin"]})
 
+    def test_web_output_contains_availability_metadata_and_audit_log(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "otc.xlsx"
+            target = Path(directory) / "web.json"
+            log = Path(directory) / "runs.jsonl"
+            workbook(source)
+            self.assertEqual(
+                main([
+                    str(source), "--web-output", "--availability", "non-pharmacy",
+                    "--log", str(log), "-o", str(target),
+                ]),
+                0,
+            )
+            web_data = json.loads(target.read_text(encoding="utf-8"))
+            self.assertEqual(web_data["metadata"]["availability"], "non-pharmacy")
+            self.assertEqual(web_data["diseases"]["Hovedpine"], ["Produkt A", "Produkt B"])
+            audit_record = json.loads(log.read_text(encoding="utf-8"))
+            self.assertEqual(audit_record["disease_count"], 2)
+            self.assertEqual(len(audit_record["source_sha256"]), 64)
+
 
 if __name__ == "__main__":
     unittest.main()

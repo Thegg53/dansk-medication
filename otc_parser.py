@@ -6,9 +6,11 @@ from __future__ import annotations
 import argparse
 import csv
 import html
+import hashlib
 import json
 import re
 import sys
+from datetime import datetime, timezone
 import unicodedata
 import urllib.request
 import zipfile
@@ -251,6 +253,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("workbook", nargs="?", type=Path, help="Local .xlsx workbook")
     parser.add_argument("--sheet", help="Worksheet name (defaults to the first worksheet)")
     parser.add_argument("--source-page", default=SOURCE_PAGE, help="Page containing the workbook link")
+    parser.add_argument(
+        "--availability",
+        choices=("non-pharmacy", "pharmacy", "unknown"),
+        default="non-pharmacy",
+        help="Availability represented by this source file",
+    )
+    parser.add_argument(
+        "--web-output",
+        action="store_true",
+        help="Wrap the mapping with metadata for a webpage data source",
+    )
+    parser.add_argument(
+        "--log",
+        type=Path,
+        help="Append a JSON audit record for this generation run",
+    )
     parser.add_argument("-o", "--output", type=Path, help="Write JSON to this file")
     args = parser.parse_args(argv)
     try:
@@ -258,11 +276,29 @@ def main(argv: list[str] | None = None) -> int:
         index = parse_csv(workbook) if workbook.suffix.lower() == ".csv" else parse_workbook(workbook, args.sheet)
     except (OSError, ValueError, zipfile.BadZipFile) as error:
         parser.error(str(error))
-    output = json.dumps(index, ensure_ascii=False, indent=2) + "\n"
+    generated_at = datetime.now(timezone.utc).isoformat()
+    source = str(args.workbook) if args.workbook else SOURCE_WORKBOOK
+    metadata = {
+        "generated_at": generated_at,
+        "source": source,
+        "availability": args.availability,
+        "disease_count": len(index),
+        "medication_count": sum(len(items) for items in index.values()),
+    }
+    if args.workbook:
+        metadata["source_sha256"] = hashlib.sha256(args.workbook.read_bytes()).hexdigest()
+    if args.web_output:
+        output_data = {"metadata": metadata, "diseases": index}
+    else:
+        output_data = index
+    output = json.dumps(output_data, ensure_ascii=False, indent=2) + "\n"
     if args.output:
         args.output.write_text(output, encoding="utf-8")
     else:
         sys.stdout.write(output)
+    if args.log:
+        with args.log.open("a", encoding="utf-8") as log:
+            log.write(json.dumps(metadata, ensure_ascii=False) + "\n")
     return 0
 
 
