@@ -198,6 +198,12 @@ def atc_to_disease(code: str) -> str:
     return _ATC_DISEASES.get(prefix, f"ATC:{code}") if code else ""
 
 
+def is_veterinary_medication(name: str) -> bool:
+    """Identify explicitly veterinary products in the medication name."""
+    name = _text(name).lower()
+    return bool(re.search(r"(?<![a-z\u00e6\u00f8\u00e5])(hund(?:e)?|kat(?:te)?)(?![a-z\u00e6\u00f8\u00e5])", name))
+
+
 def parse_workbook(path: str | Path, sheet_name: str | None = None) -> OrderedDict[str, list[str]]:
     """Read an OTC .xlsx workbook and return ``disease -> medications``.
 
@@ -259,22 +265,71 @@ def render_html(data: object) -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OTC medicines</title>
 <style>body{{font:16px system-ui,sans-serif;margin:2rem auto;max-width:50rem;padding:0 1rem}}
-input{{font:inherit;padding:.5rem;width:100%}}li{{margin:.35rem 0}}small{{color:#555}}</style>
+.controls{{display:flex;gap:.75rem;align-items:end;flex-wrap:wrap;margin:1rem 0}}
+.control{{flex:1 1 18rem}}label{{display:block;margin-bottom:.35rem;font-weight:600}}
+select,button{{font:inherit;padding:.65rem}}select{{width:100%}}
+button{{border:1px solid #777;border-radius:.35rem;background:#fff;cursor:pointer}}
+button[aria-pressed="true"]{{background:#1f6f43;color:#fff;border-color:#1f6f43}}
+li{{margin:.35rem 0}}#veterinary{{border:2px solid #1f6f43;border-radius:.5rem;padding:.25rem 1rem 1rem;margin:1.5rem 0}}
+@media (max-width:32rem){{body{{margin:1rem auto}}.controls{{align-items:stretch}}.control{{flex-basis:100%}}}}</style>
 </head><body><h1>Over-the-counter medicines</h1>
-<p><label for="filter">Filter by disease</label></p>
-<input id="filter" type="search" placeholder="e.g. allergy">
-<p id="status">Loading…</p><main id="results"></main>
+<div class="controls">
+  <div class="control"><label for="disease-filter">Disease</label><select id="disease-filter"></select></div>
+  <button id="veterinary-toggle" type="button" aria-pressed="false">Show veterinary use</button>
+</div>
+<p id="status">Loading…</p>
+<section id="veterinary" hidden><h2>Veterinary use</h2><ul id="veterinary-list"></ul></section>
+<main id="results"></main>
 <script>
-const data={payload}, filter=document.querySelector("#filter");
+const data={payload};
+const filter=document.querySelector("#disease-filter");
+const veterinaryToggle=document.querySelector("#veterinary-toggle");
+const veterinarySection=document.querySelector("#veterinary");
+const veterinaryList=document.querySelector("#veterinary-list");
 const results=document.querySelector("#results"), diseases=data.diseases||data;
-function render(){{const query=filter.value.trim().toLowerCase(); results.replaceChildren();
-Object.entries(diseases).filter(([d])=>d.toLowerCase().includes(query)).forEach(([d,ms])=>{{
+const isUnknownDisease=d=>d.startsWith("ATC:");
+const isVeterinaryDisease=d=>/^ATC:Q/i.test(d);
+const isVeterinaryMedication=m=>/(?<![a-zæøå])(hund(?:e)?|kat(?:te)?)(?![a-zæøå])/i.test(m);
+const diseaseEntries=Object.entries(diseases).sort(([a],[b])=>{{
+  const unknownA=isUnknownDisease(a), unknownB=isUnknownDisease(b);
+  if(unknownA!==unknownB) return unknownA?1:-1;
+  return a.localeCompare(b,"da");
+}});
+filter.replaceChildren();
+const allOption=document.createElement("option");
+allOption.value=""; allOption.textContent="All known diseases"; filter.append(allOption);
+diseaseEntries.filter(([d])=>!isUnknownDisease(d)).forEach(([d])=>{{
+  const option=document.createElement("option"); option.value=d; option.textContent=d; filter.append(option);
+}});
+const veterinaryMedications=new Set();
+diseaseEntries.forEach(([d,medications])=>medications.forEach(m=>{{
+  if(isVeterinaryDisease(d)||isVeterinaryMedication(m)) veterinaryMedications.add(m);
+}}));
+function render(){{
+const veterinaryEnabled=veterinaryToggle.getAttribute("aria-pressed")==="true";
+veterinarySection.hidden=!veterinaryEnabled;
+veterinaryList.replaceChildren();
+if(veterinaryEnabled)[...veterinaryMedications].sort((a,b)=>a.localeCompare(b,"da")).forEach(m=>{{
+  const item=document.createElement("li"); item.textContent=m; veterinaryList.append(item);
+}});
+results.replaceChildren();
+diseaseEntries.filter(([d])=>!filter.value||d===filter.value).forEach(([d,ms])=>{{
+const humanMedications=ms.filter(m=>!veterinaryMedications.has(m));
+if(!humanMedications.length)return;
 const section=document.createElement("section"); const heading=document.createElement("h2");
 heading.textContent=d; const list=document.createElement("ul");
-ms.forEach(m=>{{const item=document.createElement("li"); item.textContent=m; list.append(item)}});
+humanMedications.forEach(m=>{{const item=document.createElement("li"); item.textContent=m; list.append(item)}});
 section.append(heading,list); results.append(section);}});}}
-document.querySelector("#status").textContent=Object.keys(diseases).length+" disease categories";
-filter.addEventListener("input",render); render();
+document.querySelector("#status").textContent=diseaseEntries.length+" disease categories · "+veterinaryMedications.size+" veterinary medicines";
+}}
+filter.addEventListener("change",render);
+veterinaryToggle.addEventListener("click",()=>{{
+const enabled=veterinaryToggle.getAttribute("aria-pressed")!=="true";
+veterinaryToggle.setAttribute("aria-pressed",String(enabled));
+veterinaryToggle.textContent=enabled?"Hide veterinary use":"Show veterinary use";
+render();
+}});
+render();
 </script></body></html>
 """
 
