@@ -5,7 +5,14 @@ import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
-from otc_parser import atc_to_disease, main, parse_csv, parse_workbook
+from otc_parser import (
+    atc_to_disease,
+    is_veterinary_medication,
+    main,
+    parse_csv,
+    parse_workbook,
+    render_html,
+)
 
 
 def workbook(path: Path) -> None:
@@ -25,6 +32,19 @@ def workbook(path: Path) -> None:
 
 
 class OtcParserTests(unittest.TestCase):
+    def test_identifies_danish_animal_product_names_as_veterinary(self):
+        self.assertTrue(is_veterinary_medication("AdTab til hunde"))
+        self.assertTrue(is_veterinary_medication("Frontline til kat"))
+        self.assertTrue(is_veterinary_medication("Capstar til katte"))
+        self.assertFalse(is_veterinary_medication("Paracetamol"))
+
+    def test_html_uses_disease_dropdown_veterinary_toggle_and_unknown_sorting(self):
+        html = render_html({"diseases": {"allergy": ["Cetirizin"], "ATC:ZZZ": ["Produkt"]}})
+        self.assertIn('id="disease-filter"', html)
+        self.assertIn('id="veterinary-toggle"', html)
+        self.assertIn('All known diseases', html)
+        self.assertIn('unknownA?1:-1', html)
+
     def test_groups_medications_and_fills_merged_disease_cells(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "otc.xlsx"
